@@ -259,6 +259,10 @@ if __name__ == '__main__':
        '--invert', action='store_true',
        help='Invert subset.'
     )
+    parser.add_argument(
+       '--save', type=str, default='',
+       help='Path to saved model.'
+    )
 
     args = parser.parse_args()
 
@@ -286,9 +290,12 @@ if __name__ == '__main__':
     nonzeros, total = count_nonzero_weights(model)
     print(f'total nonzero parameters: {nonzeros}/{total}')
 
-    # for dataset in ['wikitext2', 'ptb', 'c4']:
-    #     dataloader, testloader = get_loaders(
-    #         dataset, seed=args.seed, model=args.model, seqlen=model.seqlen
-    #     )
-    #     print(dataset)
-    #     llama_eval(model, testloader, DEV)
+    if args.save:
+        model.save_pretrained(args.save)
+
+    for dataset in ['wikitext2', 'ptb', 'c4']:
+        dataloader, testloader = get_loaders(
+            dataset, seed=args.seed, model=args.model, seqlen=model.seqlen
+        )
+        print('Dataset:', dataset)
+        llama_eval(model, testloader, DEV)
