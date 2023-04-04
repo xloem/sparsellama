@@ -1,55 +1,40 @@
-# SparseGPT
+# SparseLLaMA
 
-This repository contains code to reproduce the key results of the paper [SparseGPT: Massive Language Models Can be Accurately Pruned in One-shot](https://arxiv.org/abs/2301.00774).
+This repository contains code to reproduce the key results of the paper [SparseGPT: Massive Language Models Can be Accurately Pruned in One-shot](https://arxiv.org/abs/2301.00774) with the LLaMA model.
 
 Specifically, it provides scripts and implementations to:
 
-* Evaluate baseline and pruned models on raw-WikiText2, PTB and C4-subset. (`datautils.py`, `opt.py`, `bloom.py`) 
-* Perform unstructured, n:m and sparse + quantized SparseGPT compression on OPT and BLOOM models. (`sparsegpt.py`, `opt.py`, `bloom.py`)
+* Evaluate baseline and pruned models on raw-WikiText2, PTB and C4-subset. (`datautils.py`, `opt.py`, `bloom.py`, `llama.py`) 
+* Perform unstructured, n:m and sparse + quantized SparseGPT compression on OPT and BLOOM models. (`sparsegpt.py`, `opt.py`, `bloom.py`, `llama.py`)
 
-We note that this SparseGPT implementation is based on our open-source [GPTQ code](https://github.com/IST-DASLab/gptq). 
+Note that this SparseGPT implementation was originally based on the open-source [GPTQ code](https://github.com/IST-DASLab/gptq). 
+
+## TODO
+
+The output is not yet what a new user might expect:
+
+- [ ] Although weights are set to zero in the passed proportion, at the end they are written out as full dense matrices, requiring the same storage and runtime operations as before unless further change is made.
+- [ ] Although weights are set to quantized values, they are still written to disk in float16. This can likely be improved by pulling a little more code from the GPTQ project.
+
 
 ## Dependencies
 
 * `torch`: tested on v1.10.1+cu111
-* `transformers`: tested on v4.21.2
-* `datasets`: tested on v1.17.0
+* `transformers`: tested on v4.28.0
+* `datasets`: tested on v2.10.1
 
 ## Usage
 
-Here are some sample commands to run baselines and sparsification on OPT models, followed by perplexity evaluations on raw-WikiText2, PTB and C4.
+Here is a simple command to sparsify a LLaMA model.
 See also the CMD-argument documentation.
 
 ```
-# Run dense baseline
-python opt.py facebook/opt-125m c4
-
-# Run magnitude baseline
-python opt.py facebook/opt-125m c4 --sparsity .5 --gmp
-
-# Prune to 50\% uniform sparsity with SparseGPT
-python opt.py facebook/opt-125m c4 --sparsity .5
-
-# Prune to full 2:4 sparsity with SparseGPT
-python opt.py facebook/opt-125m c4 --prunen 2 --prunem 4
-
-# Prune to 50\% + 4-bit with SparseGPT
-python opt.py facebook/opt-125m c4 --sparsity .5 --wbits 4
+python llama.py path/to/llama-hf/7B c4 --sparsity 0.5 --blocksize 128 --wbits 4 --save llama-7B-sparse-50pct-128blksz-4bit
 ```
 
-To run on other OPT models, replace "facebook/opt-125m" by the HuggingFace name of the corresponding model.
-For the 175B model, access must first be requested from Meta and the checkpoint converted to HuggingFace format, then its location can simply be passed as a name to this script.
+To run on other LLaMA models, replace "path/to/llama-hf/7B" by the path or HuggingFace name of the corresponding model.
 
-The BLOOM script `bloom.py` has a very similar interface, however some features are currently only available for OPT, e.g.:
-
-```
-# Sparsify BLOOM-176B with SparseGPT
-python bloom.py bigscience/bloom c4 --sparsity .5
-```
-
-In case one would like to save the sparsified model specify path to saved checkpoint via  `--save` flag.
-
-One can optionally log evalution results to W&B with `--log_wandb`. 
+The original OPT and BLOOM scripts are also present here and have a very similar interface.
 
 ## Cite
 
