@@ -46,6 +46,9 @@ def llama_sequential(model, dataloader, dev, means=None, stds=None):
     inps = torch.zeros(
         (args.nsamples, model.seqlen, model.config.hidden_size), dtype=dtype, device=dev
     )
+    position_ids = torch.arange(
+        0, model.seqlen, dtype=torch.long, device=dev
+    ).unsqueeze(0).view(-1, model.seqlen)
     cache = {'i': 0, 'attention_mask': None}
 
     class Catcher(nn.Module):
@@ -83,6 +86,11 @@ def llama_sequential(model, dataloader, dev, means=None, stds=None):
             if (not (args.minlayer <= i < args.maxlayer and args.prune_only in name)) == (not args.invert):
                 continue
             gpts[name] = SparseGPT(subset[name])
+            if args.wbits < 16:
+                gpts[name].quantizer = Quantizer()
+                gpts[name].quantizer.configure(
+                    args.wbits, perchannel=True, sym=False, mse=False
+                )
 
         def add_batch(name):
             def tmp(_, inp, out):
@@ -92,19 +100,24 @@ def llama_sequential(model, dataloader, dev, means=None, stds=None):
         for name in gpts:
             handles.append(subset[name].register_forward_hook(add_batch(name)))
         for j in range(args.nsamples):
-            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask)[0]
+            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
         for h in handles:
             h.remove()
 
         for name in gpts:
+            print(i, name)
+            print('Pruning ...')
             gpts[name].fasterprune(
-                args.sparsity, prunen=args.prunen, prunem=args.prunem, percdamp=args.percdamp
+                args.sparsity, prunen=args.prunen, prunem=args.prunem, percdamp=args.percdamp, blocksize=args.blocksize
             )
+            gpts[name].free()
+
         for j in range(args.nsamples):
-            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask)[0]
+            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
 
         layers[i] = layer.cpu()
         del gpts 
+        del layer
         torch.cuda.empty_cache()
 
         inps, outs = outs, inps
@@ -129,6 +142,9 @@ def llama_eval(model, testenc, dev):
     inps = torch.zeros(
         (nsamples, model.seqlen, model.config.hidden_size), dtype=dtype, device=dev
     )
+    position_ids = torch.arange(
+        0, model.seqlen, dtype=torch.long, device=dev
+    ).unsqueeze(0).view(-1, model.seqlen)
     cache = {'i': 0, 'attention_mask': None}
 
     class Catcher(nn.Module):
@@ -168,7 +184,7 @@ def llama_eval(model, testenc, dev):
                 W.data[torch.abs(W.data) <= thresh] = 0
 
         for j in range(nsamples):
-            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask)[0]
+            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
         layers[i] = layer.cpu() 
         del layer
         torch.cuda.empty_cache()
@@ -208,10 +224,6 @@ if __name__ == '__main__':
         help='LLAMA model to load; pass `llama/7B`.'
     )
     parser.add_argument(
-        '--model_save', type=str,
-        help='path to save the sparsified model to'
-    )
-    parser.add_argument(
         'dataset', type=str, choices=['wikitext2', 'ptb', 'c4'],
         help='Where to extract calibration data from.'
     )
@@ -240,8 +252,16 @@ if __name__ == '__main__':
         help='M for N:M pruning.'
     )
     parser.add_argument(
+        '--blocksize', type=int, default=128,
+        help='Blocksize to use for adaptive mask selection.'
+    )
+    parser.add_argument(
         '--gmp', action='store_true',
         help='Whether to run the GMP baseline.'
+    )
+    parser.add_argument(
+        '--wbits', type=int, default=16,
+        help='Whether to quantize as well.'
     )
     parser.add_argument(
         '--minlayer', type=int, default=-1,
@@ -266,12 +286,15 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    print('loading model ...')
     model = get_llama(args.model)
     model.eval()
-
+    
+    print('counting nonzero weights ...')
     nonzeros, total = count_nonzero_weights(model)
     print(f'total nonzero parameters: {nonzeros}/{total}')
 
+    print('getting datasets ...')
     dataloader, testloader = get_loaders(
         args.dataset, nsamples=args.nsamples, seed=args.seed, model=args.model, seqlen=model.seqlen
     )
@@ -285,13 +308,11 @@ if __name__ == '__main__':
                 break
         print(time.time() - tick)
 
-    model.save_pretrained(args.model_save)
+    if args.save:
+        model.save_pretrained(args.save)
 
     nonzeros, total = count_nonzero_weights(model)
     print(f'total nonzero parameters: {nonzeros}/{total}')
-
-    if args.save:
-        model.save_pretrained(args.save)
 
     for dataset in ['wikitext2', 'ptb', 'c4']:
         dataloader, testloader = get_loaders(
