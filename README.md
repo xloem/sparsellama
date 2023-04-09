@@ -14,7 +14,7 @@ Note that this SparseGPT implementation was originally based on the open-source 
 The output is not yet what a new user might expect:
 
 - [ ] Although weights are set to zero in the passed proportion, at the end they are written out as full dense matrices, requiring the same storage and runtime operations as before unless further change is made.
-- [ ] Although weights are set to quantized values, they are still written to disk in float16. This can likely be improved by pulling a little more code from the GPTQ project.
+- [ ] Although weights can be set to quantized values, they are still written to disk in float16. This can likely be improved by pulling a little more code from the GPTQ project.
 
 
 ## Dependencies
@@ -29,7 +29,7 @@ Here is a simple command to sparsify a LLaMA model.
 See also the CMD-argument documentation.
 
 ```
-python llama.py path/to/llama-hf/7B c4 --sparsity 0.5 --blocksize 128 --wbits 4 --save llama-7B-sparse-50pct-128blksz-4bit
+python llama.py path/to/llama-hf/7B c4 --sparsity 0.5 --blocksize 128 --save llama-7B-sparse-50pct-128blksz-4bit
 ```
 
 To run on other LLaMA models, replace "path/to/llama-hf/7B" by the path or HuggingFace name of the corresponding model.
