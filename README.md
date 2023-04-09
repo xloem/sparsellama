@@ -29,7 +29,7 @@ Here is a simple command to sparsify a LLaMA model.
 See also the CMD-argument documentation.
 
 ```
-python llama.py path/to/llama-hf/7B c4 --sparsity 0.5 --blocksize 128 --save llama-7B-sparse-50pct-128blksz-4bit
+python llama.py path/to/llama-hf/7B c4 --sparsity 0.5 --blocksize 128 --save llama-7B-sparse-50pct-128blksz
 ```
 
 To run on other LLaMA models, replace "path/to/llama-hf/7B" by the path or HuggingFace name of the corresponding model.
