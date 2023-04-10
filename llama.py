@@ -27,7 +27,7 @@ def get_llama(model):
     torch.nn.init.uniform_ = skip
     torch.nn.init.normal_ = skip
     from transformers import LlamaForCausalLM
-    model = LlamaForCausalLM.from_pretrained(model, torch_dtype='auto', low_cpu_mem_usage=True)
+    model = LlamaForCausalLM.from_pretrained(model, device_map='auto', torch_dtype='auto', low_cpu_mem_usage=True)
     model.seqlen = 2048
     return model
 
@@ -68,7 +68,7 @@ def llama_sequential(model, dataloader, dev, means=None, stds=None):
             pass
     layers[0] = layers[0].module
 
-    layers[0] = layers[0].cpu()
+    #layers[0] = layers[0].cpu()
     model.base_model.embed_tokens = model.base_model.embed_tokens.cpu()
     torch.cuda.empty_cache()
 
@@ -78,7 +78,11 @@ def llama_sequential(model, dataloader, dev, means=None, stds=None):
     print('Ready.')
     print('pruning...')
     for i in tqdm(range(len(layers))):
-        layer = layers[i].to(dev)
+        dev = next(layers[i].parameters()).device
+        attention_mask = attention_mask.to(dev)
+        position_ids = position_ids.to(dev)
+        inps = inps.to(dev)
+        layer = layers[i]#.to(dev)
 
         subset = find_layers(layer)
         gpts = {}
@@ -101,6 +105,7 @@ def llama_sequential(model, dataloader, dev, means=None, stds=None):
             handles.append(subset[name].register_forward_hook(add_batch(name)))
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+
         for h in handles:
             h.remove()
 
